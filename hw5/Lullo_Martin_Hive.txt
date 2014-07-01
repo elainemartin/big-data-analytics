@@ -1,0 +1,30 @@
+--load rec.data
+CREATE EXTERNAL TABLE lm (userid INT, movieid INT, rating INT, ts INT) 
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' STORED AS TEXTFILE;
+LOAD DATA INPATH "rec.data" INTO TABLE lm; 
+
+--get all movies that user 931 has watched and rated highly
+CREATE EXTERNAL TABLE lmUserMovies (movieid INT);
+insert overwrite table lmUserMovies 
+select movieid from lm where userid=931 and rating>3;
+
+--get all other users that have watched the same movies above and who also rated those movies highly
+CREATE EXTERNAL TABLE lmOUW (userid INT);
+insert overwrite table lmOUW
+select distinct lm.userid from lm join lmUserMovies 
+on lm.movieid = lmUserMovies.movieid
+where rating > 3;
+
+--get all movies that user 931 has not seen that the users above rated highly
+CREATE EXTERNAL TABLE lmNotWatched (movieid INT);
+insert overwrite table lmNotWatched
+select distinct unseen
+from (select lm.movieid as oum 
+	from lm join lmOUW
+	on lm.userid = lmOUW.userid
+	where rating > 3) t1 join
+(select distinct lm.movieid as unseen 
+	from lm left outer join lmUserMovies
+	on lm.movieid = lmUserMovies.movieid
+	where lmUserMovies.movieid is Null) t2
+on t1.oum=t2.unseen;
